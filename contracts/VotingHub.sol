@@ -93,7 +93,7 @@ contract VotingHubV1 is AccessManager {
     event ProposalFailed(uint256 indexed id);
 
     /// @notice An event emitted when a proposal reach the minimum passing percentage
-    event ProposalFinished(uint256 indexed id, string passingOption, uint256 totalVotes, uint256 votesInFavor);
+    event ProposalPassed(uint256 indexed id, uint256 totalVotes, uint256 votesInFavor);
 
     /**
      * @notice Construct a new VotingHubV1 contract 
@@ -117,10 +117,25 @@ contract VotingHubV1 is AccessManager {
         TOLL_BURN_RATE = _rate;
     }
 
+    /**
+     * @notice Get proposal unique hash 
+     * @param _proposalId - Is the id of proposal
+     * @return string - proposal unique hash used to identify proposal in the voting dapp backend
+     **/
     function getUniqueHash (uint256 _proposalId) public view onlyAuthorized returns (string memory)  {
         return proposalUniqueHash[_proposalId];
     }
 
+    /**
+     * @notice Create a new proposal 
+     * @param _description - Proposal description
+     * @param _opens - Timestamp at which the proposal will be open to new votes
+     * @param _closes - Timestamp at which the proposal will be closed to new votes
+     * @param _votingToll - Number of native coins necessary to cast a vote
+     * @param _passingPerc - Passing Vote Percentage
+     * @param _uniqueHash - Proposal unique hash used to identify proposal in the voting dapp backend
+     * @return uint - proposal id
+     **/
     function propose(string memory _description, uint256 _opens, uint256 _closes, uint256 _votingToll, uint256 _passingPerc, string memory _uniqueHash) public notContract returns (uint) {
         
         uint latestProposalId = latestProposalIds[msg.sender];
@@ -151,10 +166,20 @@ contract VotingHubV1 is AccessManager {
         return newProposal.id;        
     }
 
+    /**
+     * @notice Calculate toll that will be send to the zero address 
+     * @param _toll - voting toll
+     * @dev this is a helper function to calculate the toll that will be burned
+     **/
     function _calculateTollBurned(uint256 _toll) internal view returns (uint) {
         return (_toll * TOLL_BURN_RATE) / 100;
     }
 
+    /**
+     * @notice Cast a vote on a proposal 
+     * @param _proposalId - Is the id of proposal
+     * @param _support - Is a boolean that represent the vote choice
+     **/
     function castVote(uint256 _proposalId, bool _support) public notContract payable {
         require(proposals[_proposalId].currentState != ProposalState.canceled, "VotingHubV1::castVote: proposal is canceled");
         _updatedStatus(_proposalId);
@@ -165,6 +190,11 @@ contract VotingHubV1 is AccessManager {
         payable(address(TREASURY_ADDRESS)).transfer(sub256(msg.value, _calculateTollBurned(msg.value)));
         return _castVote(msg.sender, _proposalId, _support);
     }
+
+    /**
+     * @notice Abstain from voting but still contribute a voting toll
+     * @param _proposalId - Is the id of proposal
+     **/
 
     function castVote(uint256 _proposalId) public notContract payable {
         require(proposals[_proposalId].currentState != ProposalState.canceled, "VotingHubV1::castVote: proposal is canceled");
@@ -179,8 +209,8 @@ contract VotingHubV1 is AccessManager {
 
     function _castVote(address _voter, uint256 _proposalId, bool _support) internal {
         require(proposals[_proposalId].currentState == ProposalState.active, "VotingHubV1::castVote: voting is closed");
-        Proposal storage proposal = proposals[_proposalId];
-        Receipt storage receipt = receipts[_voter][_proposalId];
+        Proposal memory proposal = proposals[_proposalId];
+        Receipt memory receipt = receipts[_voter][_proposalId];
         require(receipt.hasVoted == false, "VotingHubV1::castVote: voter already voted");
 
         if(_support) {
@@ -199,8 +229,8 @@ contract VotingHubV1 is AccessManager {
 
     function _castVote(address _voter, uint256 _proposalId) internal {
         require(proposals[_proposalId].currentState == ProposalState.active, "VotingHubV1::castVote: voting is closed");
-        Proposal storage proposal = proposals[_proposalId];
-        Receipt storage receipt = receipts[_voter][_proposalId];
+        Proposal memory proposal = proposals[_proposalId];
+        Receipt memory receipt = receipts[_voter][_proposalId];
         require(receipt.hasVoted == false, "VotingHubV1::castVote: voter already voted");
 
         receipt.voterChoice = Choice.abstain;
@@ -211,10 +241,21 @@ contract VotingHubV1 is AccessManager {
          emit VoteCast(_voter, proposal.id, receipt.voterChoice, receipt.votes);
     }
 
+    /**
+     * @notice Get the receipt of a voter on a proposal
+     * @param _proposalId - Is the id of proposal
+     * @param _voter - Is the address of the voter
+     * @return Receipt - The receipt of the voter on the proposal
+     **/
     function getReceipt(uint256 _proposalId, address _voter) public view returns (Receipt memory) {
         return receipts[_voter][_proposalId];
     }
 
+    /**
+     * @notice Get the proposal by id
+     * @param _proposalId - Is the id of proposal
+     * @return Proposal - It returns the proposal struct with all its details
+     **/
     function getProposal(uint256 _proposalId) public view returns (Proposal memory) {
         return proposals[_proposalId];
     }
@@ -241,19 +282,68 @@ contract VotingHubV1 is AccessManager {
         return a - b;
     }
 
+    /**
+     * @notice Emit an event announcing the results of a proposal
+     * @param _proposalId - Is the id of proposal
+     **/
+    function announceResults(uint256 _proposalId) public {
+        _updatedStatus(_proposalId);
+        Proposal memory proposal = proposals[_proposalId];
+        require(proposal.currentState == ProposalState.finished, "VotingHubV1::closeProposal: proposal is not finished");
+        require(msg.sender == proposal.proposer, "VotingHubV1::closeProposal: only proposer can announce results");
+        _checkProposal(_proposalId);
+    }
+
+    /**
+     * @notice Protected function to emit an event announcing the results of a proposal
+     * @param _proposalId - Is the id of proposal
+     **/
+    function protectedAnnounceResults(uint256 _proposalId) public onlyAuthorized {
+        _updatedStatus(_proposalId);
+        Proposal memory proposal = proposals[_proposalId];
+        require(proposal.currentState == ProposalState.finished, "VotingHubV1::closeProposal: proposal is not finished");
+        _checkProposal(_proposalId);
+    }
+
+    function _checkProposal(uint256 _proposalId) private {
+        Proposal memory proposal = proposals[_proposalId];
+        uint256 totalVotes = add256(proposal.forVotes, proposal.againstVotes);
+        uint forPercentage = proposal.forVotes * 100 / totalVotes;
+        if (forPercentage > proposal.passingPerc) {
+            emit ProposalPassed(proposal.id, add256(proposal.forVotes, proposal.againstVotes), proposal.forVotes);
+        } else {
+            emit ProposalFailed(proposal.id);
+        }
+    }
+
+    /**
+     * @notice Function to allow proposer can cancel his proposal
+     * @param _proposalId - Is the id of proposal
+     **/
     function cancelProposal(uint256 _proposalId) public {
-        Proposal storage proposal = proposals[_proposalId];
+        Proposal memory proposal = proposals[_proposalId];
         require(proposal.proposer == msg.sender, "VotingHubV1::cancelProposal: only proposer can cancel");
         require(proposal.currentState == ProposalState.active, "VotingHubV1::cancelProposal: proposal is not active");
         proposal.currentState = ProposalState.canceled;
+        emit ProposalFailed(proposal.id);
     }
 
+    /**
+     * @notice Function to allow authorized individuals (and contract owner) to cancel a proposal
+     * @param _proposalId - Is the id of proposal
+     **/
     function protectedCancelProposal(uint256 _proposalId) public onlyAuthorized {
-        Proposal storage proposal = proposals[_proposalId];
+        Proposal memory proposal = proposals[_proposalId];
         require(proposal.currentState == ProposalState.active, "VotingHubV1::cancelProposal: proposal is not active");
         proposal.currentState = ProposalState.canceled;
+        emit ProposalFailed(proposal.id);
     }
 
+    /**
+     * @notice In a few cases, residual funds may be left in the contract. This function allows the owner to withdraw them.
+     * @dev This function is only callable by the owner. 
+     * @dev This function is only callable if there are funds left in the contract.
+    **/
      function withdrawRemaining() external onlyOwner {
         require(address(this).balance > 0, "VotingHubV1::withdrawnRemaining: no balance to withdraw");
         payable(msg.sender).transfer(address(this).balance);
