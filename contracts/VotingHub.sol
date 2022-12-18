@@ -67,6 +67,8 @@ contract VotingHubV1 is AccessManager {
         uint forVotes;
         /// @notice Current number of votes in opposition to this proposal
         uint againstVotes;
+        /// @notice Null Votes
+        uint nullVotes;
         /// @notice Proposal State
         ProposalState currentState;
     }
@@ -155,6 +157,7 @@ contract VotingHubV1 is AccessManager {
             passingPerc: _passingPerc,
             forVotes: 0,
             againstVotes: 0,
+            nullVotes: 0,
             currentState: ProposalState.pending
         });
 
@@ -233,6 +236,7 @@ contract VotingHubV1 is AccessManager {
         Receipt memory receipt = receipts[_voter][_proposalId];
         require(receipt.hasVoted == false, "VotingHubV1::castVote: voter already voted");
 
+        proposal.nullVotes = add256(proposal.nullVotes, 1);
         receipt.voterChoice = Choice.abstain;
 
         receipt.hasVoted = true;
