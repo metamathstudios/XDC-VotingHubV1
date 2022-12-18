@@ -184,6 +184,7 @@ contract VotingHubV1 is AccessManager {
      * @param _support - Is a boolean that represent the vote choice
      **/
     function castVote(uint256 _proposalId, bool _support) public notContract payable {
+        require(receipts[msg.sender][_proposalId].hasVoted == false, "VotingHubV1::castVote: voter already voted");
         require(proposals[_proposalId].currentState != ProposalState.canceled, "VotingHubV1::castVote: proposal is canceled");
         _updatedStatus(_proposalId);
         require(msg.value == proposals[_proposalId].toll, "VotingHubV1::castVote: toll amount is not correct");
@@ -200,6 +201,7 @@ contract VotingHubV1 is AccessManager {
      **/
 
     function castVote(uint256 _proposalId) public notContract payable {
+        require(receipts[msg.sender][_proposalId].hasVoted == false, "VotingHubV1::castVote: voter already voted");
         require(proposals[_proposalId].currentState != ProposalState.canceled, "VotingHubV1::castVote: proposal is canceled");
         _updatedStatus(_proposalId);
         require(msg.value == proposals[_proposalId].toll, "VotingHubV1::castVote: toll amount is not correct");
