@@ -89,7 +89,7 @@ contract VotingHubV1 is AccessManager {
     event ProposalCreated(uint256 indexed id, address indexed proposer, uint256 opens, uint256 closes, string uniqueHash);
 
     /// @notice An event emitted when a vote has been cast on a proposal
-    event VoteCast(address voter, uint proposalId, Choice voterChoice, uint256 votes);
+    event VoteCast(address indexed voter, uint proposalId, Choice voterChoice, uint256 votes);
 
     /// @notice An event emitted when a proposal doesn't reach the minimum passing percentage
     event ProposalFailed(uint256 indexed id);
@@ -184,7 +184,6 @@ contract VotingHubV1 is AccessManager {
      * @param _support - Is a boolean that represent the vote choice
      **/
     function castVote(uint256 _proposalId, bool _support) public notContract payable {
-        require(receipts[msg.sender][_proposalId].hasVoted == false, "VotingHubV1::castVote: voter already voted");
         require(proposals[_proposalId].currentState != ProposalState.canceled, "VotingHubV1::castVote: proposal is canceled");
         _updatedStatus(_proposalId);
         require(msg.value == proposals[_proposalId].toll, "VotingHubV1::castVote: toll amount is not correct");
@@ -201,7 +200,6 @@ contract VotingHubV1 is AccessManager {
      **/
 
     function castVote(uint256 _proposalId) public notContract payable {
-        require(receipts[msg.sender][_proposalId].hasVoted == false, "VotingHubV1::castVote: voter already voted");
         require(proposals[_proposalId].currentState != ProposalState.canceled, "VotingHubV1::castVote: proposal is canceled");
         _updatedStatus(_proposalId);
         require(msg.value == proposals[_proposalId].toll, "VotingHubV1::castVote: toll amount is not correct");
@@ -214,8 +212,8 @@ contract VotingHubV1 is AccessManager {
 
     function _castVote(address _voter, uint256 _proposalId, bool _support) internal {
         require(proposals[_proposalId].currentState == ProposalState.active, "VotingHubV1::castVote: voting is closed");
-        Proposal memory proposal = proposals[_proposalId];
-        Receipt memory receipt = receipts[_voter][_proposalId];
+        Proposal storage proposal = proposals[_proposalId];
+        Receipt storage receipt = receipts[_voter][_proposalId];
         require(receipt.hasVoted == false, "VotingHubV1::castVote: voter already voted");
 
         if(_support) {
@@ -234,8 +232,8 @@ contract VotingHubV1 is AccessManager {
 
     function _castVote(address _voter, uint256 _proposalId) internal {
         require(proposals[_proposalId].currentState == ProposalState.active, "VotingHubV1::castVote: voting is closed");
-        Proposal memory proposal = proposals[_proposalId];
-        Receipt memory receipt = receipts[_voter][_proposalId];
+        Proposal storage proposal = proposals[_proposalId];
+        Receipt storage receipt = receipts[_voter][_proposalId];
         require(receipt.hasVoted == false, "VotingHubV1::castVote: voter already voted");
 
         proposal.nullVotes = add256(proposal.nullVotes, 1);
@@ -294,7 +292,7 @@ contract VotingHubV1 is AccessManager {
      **/
     function announceResults(uint256 _proposalId) public {
         _updatedStatus(_proposalId);
-        Proposal memory proposal = proposals[_proposalId];
+        Proposal storage proposal = proposals[_proposalId];
         require(proposal.currentState == ProposalState.finished, "VotingHubV1::closeProposal: proposal is not finished");
         require(msg.sender == proposal.proposer, "VotingHubV1::closeProposal: only proposer can announce results");
         _checkProposal(_proposalId);
@@ -306,13 +304,13 @@ contract VotingHubV1 is AccessManager {
      **/
     function protectedAnnounceResults(uint256 _proposalId) public onlyAuthorized {
         _updatedStatus(_proposalId);
-        Proposal memory proposal = proposals[_proposalId];
+        Proposal storage proposal = proposals[_proposalId];
         require(proposal.currentState == ProposalState.finished, "VotingHubV1::closeProposal: proposal is not finished");
         _checkProposal(_proposalId);
     }
 
     function _checkProposal(uint256 _proposalId) private {
-        Proposal memory proposal = proposals[_proposalId];
+        Proposal storage proposal = proposals[_proposalId];
         uint256 totalVotes = add256(proposal.forVotes, proposal.againstVotes);
         uint forPercentage = proposal.forVotes * 100 / totalVotes;
         if (forPercentage > proposal.passingPerc) {
@@ -327,7 +325,7 @@ contract VotingHubV1 is AccessManager {
      * @param _proposalId - Is the id of proposal
      **/
     function cancelProposal(uint256 _proposalId) public {
-        Proposal memory proposal = proposals[_proposalId];
+        Proposal storage proposal = proposals[_proposalId];
         require(proposal.proposer == msg.sender, "VotingHubV1::cancelProposal: only proposer can cancel");
         require(proposal.currentState == ProposalState.active, "VotingHubV1::cancelProposal: proposal is not active");
         proposal.currentState = ProposalState.canceled;
@@ -339,7 +337,7 @@ contract VotingHubV1 is AccessManager {
      * @param _proposalId - Is the id of proposal
      **/
     function protectedCancelProposal(uint256 _proposalId) public onlyAuthorized {
-        Proposal memory proposal = proposals[_proposalId];
+        Proposal storage proposal = proposals[_proposalId];
         require(proposal.currentState == ProposalState.active, "VotingHubV1::cancelProposal: proposal is not active");
         proposal.currentState = ProposalState.canceled;
         emit ProposalFailed(proposal.id);
