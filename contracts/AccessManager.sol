@@ -38,8 +38,8 @@ contract AccessManager {
     }
 
     modifier notContract() {
-        require(!isContract(msg.sender), "PORTALES: contract is not allowed to swap");
-        require(msg.sender == tx.origin, "PORTALES: no proxy contract is allowed");
+        require(!isContract(msg.sender), "Contract is not allowed to use this function");
+        require(msg.sender == tx.origin, "Proxy contract is not allowed to use this function");
        _;
     }
 
